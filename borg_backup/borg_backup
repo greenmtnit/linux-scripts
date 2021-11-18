@@ -21,7 +21,7 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 # Borg repository
-export BORG_REPO="ssh://username@host:/backups/"
+export BORG_REPO="username@host:/backups/"
 
 # Repo passphrase
 export BORG_PASSPHRASE='your_repo_passphrase_goes_here'
@@ -93,7 +93,7 @@ check_borg_running() {
 }
 
 run_backup() {
-  print_status "Running backup."
+  print_status "START: Running backup at $(date '+%a %Y%M%D %H:%M:%S')."
   borg create -v --stats                          \
     $BORG_REPO::'{hostname}-{now:%Y%m%d%H%M%S}'    \
       /                                   \

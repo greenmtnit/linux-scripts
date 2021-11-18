@@ -13,8 +13,10 @@ You must edit the following variables in the script.
 SSH targets are in the format:
 
 ```
-ssh://username@host:/path/to/repo
+username@host:/path/to/repo
 ```
+
+Make sure the host is added to your .ssh/config file and is configured to auto-login with an SSH key.
 
 **BORG_PASSPHRASE** - passphrase for the target borg repository
 
