@@ -13,7 +13,7 @@ You must edit the following variables in the script.
 SSH targets are in the format:
 
 ```
-ssh://username@host:/path/to/repo"
+ssh://username@host:/path/to/repo
 ```
 
 **BORG_PASSPHRASE** - passphrase for the target borg repository
@@ -45,7 +45,7 @@ Here is a sample cron entry to run the script at 1AM every day, logging to the f
 ## logrotate
 You should configure logrotate to rotate the log file. See the logrotate_sample file for an example.
 
-Place the logrotate config file into /etc/logrotate.d. Make sure permissions are 644 and the owner is root
+Place the logrotate config file into /etc/logrotate.d. Make sure permissions are 644 and the owner is root:
 
 ```
 cp logrotate_sample /etc/logrotate.d/borg_backup

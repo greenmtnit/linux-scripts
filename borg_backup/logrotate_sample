@@ -1,0 +1,29 @@
+# Sample logrotate config
+# Put this in /etc/logrotate.d 
+# Make sure owner is root and permissions are 644
+
+# First goes the path to the log file to rotate
+/var/log/borg_backup.log {
+  # rotate logs weekly
+  weekly
+  
+  # keep 5 most recent logs
+  rotate 5 
+  
+  # rotate log files if they grow larger than to 10K
+  size 1M
+  
+  # add a datestamp to the rotate logs in the format YYYYMMDD
+  dateext
+  
+  # create new (empty) log files after rotating old ones
+  create
+  
+  # uncomment this if you want log files compressed
+  compress
+  
+  # Truncate the original log file to zero size in place,
+  # instead of moving the old file and creating a new one.
+  # Helps with programs that expect the log file to always be there.
+  copytruncate
+}
