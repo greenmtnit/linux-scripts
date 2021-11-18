@@ -21,13 +21,16 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 # Borg repository
-export REPO="ssh://username@host:/backups/"
+export BORG_REPO="ssh://username@host:/backups/"
 
 # Repo passphrase
 export BORG_PASSPHRASE='your_repo_passphrase_goes_here'
 
 # Address to email on failure
 dest_addr="me@mydomain.com"
+
+# Number of hourly backups to keep
+hourly="0"
 
 # Number of daily backups to keep
 daily="7"
@@ -92,7 +95,7 @@ check_borg_running() {
 run_backup() {
   print_status "Running backup."
   borg create -v --stats                          \
-    $REPO::'{hostname}-{now:%Y-%m-%d}'    \
+    $BORG_REPO::'{hostname}-{now:%Y%m%d%H%M%S}'    \
       /                                   \
       --exclude '/dev'                \
       --exclude '/proc'             \
@@ -111,6 +114,7 @@ prune_backups() {
     --list                          \
     --prefix '{hostname}-'          \
     --show-rc                       \
+    --keep-hourly   "$hourly"        \
     --keep-daily    "$daily"        \
     --keep-weekly   "$weekly"       \
     --keep-monthly  "$monthly"      \

@@ -36,13 +36,12 @@ For example, you may choose to back up only the /etc and /var/www directores, ex
 ```
 borg create -v --stats                  \
   $REPO::'{hostname}-{now:%Y-%m-%d}'    \
+    --exclude '*.tmp'                   \
     /etc                                \
     /var/www                            \
-    --exclude '*.tmp'                   \
-
 ```
 
-For referece, here is the script default, which backs up the entire system. Note the '/', specifying the system root.
+For comparision, here is the script default, which backs up the entire system. Note the '/', specifying the system root.
 
 ```
 borg create -v --stats                  \
@@ -57,8 +56,6 @@ borg create -v --stats                  \
     --exclude '/lost+found'             \
     --exclude '/run'                    \
 ```
-
-For comparision, here's the script default.
 
 ## Using cron
 
