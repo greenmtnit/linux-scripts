@@ -26,6 +26,40 @@ ssh://username@host:/path/to/repo
 
 **montlhy** - number of monthly backups to keep
 
+## Choosing What to Back Up
+By default, the script backs up the entire system (minus a few exclusions for ephemeral directories like /run and /proc).
+
+You can change this behavior.
+
+For example, you may choose to back up only the /etc and /var/www directores, excluding all files with the .tmp extension:
+
+```
+borg create -v --stats                  \
+  $REPO::'{hostname}-{now:%Y-%m-%d}'    \
+    /etc                                \
+    /var/www                            \
+    --exclude '*.tmp'                   \
+
+```
+
+For referece, here is the script default, which backs up the entire system. Note the '/', specifying the system root.
+
+```
+borg create -v --stats                  \
+  $REPO::'{hostname}-{now:%Y-%m-%d}'    \
+    /                                   \
+    --exclude '/dev'                    \
+    --exclude '/proc'                   \
+    --exclude '/sys'                    \
+    --exclude '/tmp'                    \
+    --exclude '/run'                    \
+    --exclude '/media'                  \
+    --exclude '/lost+found'             \
+    --exclude '/run'                    \
+```
+
+For comparision, here's the script default.
+
 ## Using cron
 
 Make sure the script is in a good location and is marked executable.
