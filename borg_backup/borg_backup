@@ -93,7 +93,7 @@ check_borg_running() {
 }
 
 run_backup() {
-  print_status "START: Running backup at $(date '+%a %Y%M%D %H:%M:%S')."
+  print_status "START: Running backup at $(date '+%a %Y-%m-%d %H:%M:%S')."
   borg create -v --stats                          \
     $BORG_REPO::'{hostname}-{now:%Y%m%d%H%M%S}'    \
       /                                   \
@@ -104,7 +104,7 @@ run_backup() {
       --exclude '/run'                \
       --exclude '/media'                \
       --exclude '/lost+found'                \
-      --exclude '/run'                 \
+      --exclude '/run'                 
   backup_exit=$?
 }
 

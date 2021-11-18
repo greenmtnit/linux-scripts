@@ -61,10 +61,10 @@ borg create -v --stats                  \
 
 ## Using cron
 
-Make sure the script is in a good location and is marked executable.
+Make sure the script is in a good location and has proper permissions.
 
 ```
-chmod a+x /usr/bin/borg_backup
+chmod 700 /root/bin/borg_backup
 ```
 
 Also make sure to run the script manually first as a test. The script must run without any intervention to work with cron (i.e. no need to enter passphrases, etc).
@@ -72,7 +72,8 @@ Also make sure to run the script manually first as a test. The script must run w
 Here is a sample cron entry to run the script at 1AM every day, logging to the file /var/log/borg_backup.log
 
 ```
-1 * * * * /usr/bin/borg_backup >> /var/log/borg_backup.log
+* 1 * * * /root/bin/borg_backup >> /var/log/borg_backup.log 2>&1
+
 ```
 
 ## logrotate
