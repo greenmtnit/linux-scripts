@@ -1,0 +1,142 @@
+#!/bin/bash
+#
+# Runs borg backup, then automatically prunes backup. Adapted from here: https://borgbackup.readthedocs.io/en/stable/quickstart.html
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+# Borg repository
+export REPO="ssh://username@host:/backups/"
+
+# Repo passphrase
+export BORG_PASSPHRASE='your_repo_passphrase_goes_here'
+
+# Address to email on failure
+dest_addr="me@mydomain.com"
+
+# Number of daily backups to keep
+daily="7"
+
+# Number of weekly backups to keep
+weekly="4"
+
+# Number of monthly backups to keep
+monthly="6"
+
+# Don't touch vars below this line
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print a status message
+print_status() {
+  echo
+  echo "$1"
+  echo
+}
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+send_email() {
+  local subject
+  local message
+  message="$1"
+  subject="Borg Backup Alert on $(hostname -f)"
+  echo "$message" | mail -s "$subject" "$dest_addr" 
+}
+
+cleanup_interrupt() {
+  local message
+  message="$( date ) Backup interrupted" >&2 
+  print_status "$message"  
+  send_email "$message"
+  exit 2
+}
+
+trap cleanup_interrupt INT TERM
+
+check_borg_running() {
+  if pidof -x borg; then
+    die "Backup already running"
+  fi
+}
+
+run_backup() {
+  print_status "Running backup."
+  borg create -v --stats                          \
+    $REPO::'{hostname}-{now:%Y-%m-%d}'    \
+      /                                   \
+      --exclude '/dev'                \
+      --exclude '/proc'             \
+      --exclude '/sys'             \
+      --exclude '/tmp'                \
+      --exclude '/run'                \
+      --exclude '/media'                \
+      --exclude '/lost+found'                \
+      --exclude '/run'                 \
+  backup_exit=$?
+}
+
+prune_backups() {
+  print_status "Pruning backups"
+  borg prune                          \
+    --list                          \
+    --prefix '{hostname}-'          \
+    --show-rc                       \
+    --keep-daily    "$daily"        \
+    --keep-weekly   "$weekly"       \
+    --keep-monthly  "$monthly"      \
+
+  prune_exit=$?
+}
+
+check_exit() {
+  # use highest exit code as global exit code
+  global_exit=$(( backup_exit > prune_exit ? backup_exit : prune_exit ))
+  if [ ${global_exit} -eq 0 ]; then
+    print_status "Backup and Prune finished successfully."
+  elif [ ${global_exit} -eq 1 ]; then
+    message="Backup and/or Prune finished with warnings."
+    send_email "$message"
+  else
+    message="Backup and/or Prune finished with errors."
+    send_email "$message"
+  fi
+}
+
+main() {
+  check_borg_running
+  run_backup
+  prune_backups
+  check_exit
+}
+
+main
