@@ -130,7 +130,7 @@ while :; do
 done
 
 check_rclone_running() {
-  if pidof -x rclone; then
+  if pidof -x rclone > /dev/null ; then
     die "Rclone already running. Exiting."
   fi
 }

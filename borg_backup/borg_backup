@@ -87,7 +87,7 @@ cleanup_interrupt() {
 trap cleanup_interrupt INT TERM
 
 check_borg_running() {
-  if pidof -x borg; then
+  if pidof -x borg > /dev/null; then
     die "Backup already running"
   fi
 }
