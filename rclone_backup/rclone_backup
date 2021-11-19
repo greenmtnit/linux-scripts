@@ -33,7 +33,7 @@ dest_addr="me@mydomain.com"
 # Bandwidth limit. Uses bytes, not bits! This can be a fixed limit, or set to change on a schedule. See the rclone docs for details.
 # Default of 0 means unlimited bandwidth.
 bandwidth_limit=0
-#bandwith_limit=1.25M
+#bandwidth_limit=1.25M
 
 # Other options to pass to rclone. See rclone docs.
 options=
@@ -148,7 +148,7 @@ check_options() {
 
 
 run_rclone() {
-  command="rclone sync $source $dest $verbose $dry_run --bwlimit=$bandwidth_limit $options --error-on-no-transfer" 
+  command="rclone sync $source $dest $verbose $dry_run --bwlimit=\"$bandwidth_limit\" $options --error-on-no-transfer" 
   print_status "START: Running backup at $(date '+%a %Y-%m-%d %H:%M:%S')."
   echo -e "Running with command:\n$command"
   eval "$command"
