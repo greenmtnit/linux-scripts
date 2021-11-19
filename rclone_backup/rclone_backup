@@ -129,6 +129,12 @@ while :; do
     shift
 done
 
+check_rclone_running() {
+  if pidof -x rclone; then
+    die "Rclone already running. Exiting."
+  fi
+}
+
 check_options() {
   if [ "$dry_run" ]; then
     echo "Running with --dry-run"
@@ -137,8 +143,8 @@ check_options() {
   if [ "$verbose" ]; then
    echo "Running with --verbose"
   fi
-  
 }
+
 
 
 run_rclone() {
