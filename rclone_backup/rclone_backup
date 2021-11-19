@@ -1,0 +1,171 @@
+#!/bin/bash
+#
+# Automates rclone syncs, adding error handling, etc. Partially adapted from https://github.com/wolfv6/rclone_jobber/blob/master/rclone_jobber.sh 
+# Not affiliated with rclone or rclone_jobber devs in any way. See the official rclone page at https://rclone.org
+#
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+# Source to back up. Remote destinations must be configured with rclone first. See https://rclone.org/docs/ 
+source="/path/to/dir"
+
+# Destination to back up to. Remote destinations must be configured with rclone first. See https://rclone.org/docs/ 
+dest="myremote:backups/path/"
+
+# Destination email address to send alerts to
+dest_addr="me@mydomain.com"
+
+# Bandwidth limit. Uses bytes, not bits! This can be a fixed limit, or set to change on a schedule. See the rclone docs for details.
+# Default of 0 means unlimited bandwidth.
+bandwidth_limit=0
+#bandwith_limit=1.25M
+
+# Other options to pass to rclone. See rclone docs.
+options=
+#options="--progress --interactive"
+
+# Don't touch vars below this line
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print a status message
+print_status() {
+  echo
+  echo "$1"
+  echo
+}
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+send_email() {
+  local subject
+  local message
+  message="$1"
+  subject="Rclone Backup Alert on $(hostname -f)"
+  echo "$message" | mail -s "$subject" "$dest_addr" 
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+ 
+    Automates rclone syncs. See https://rclone.org/docs/.
+    You need to manually edit variables in the script for it to work!
+    For convenience, options are provided for a dry run and verbose mode.
+
+    If you want to pass any options to rclone other than --verbose or or --dry-run, 
+    you need to add them manually to the options variable at the top of this script.    
+
+    Options:
+       -h --help              Show this help.
+       -n --dry-run           Show what would be done without actually doing it.
+       -v --verbose           Print verbose output.
+
+    Examples:
+       Run sync as configured by script variables
+       $PROGNAME
+       Do a verbose dry run of the configured sync
+       $PROGNAME --verbose --dry-run
+
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+dry_run=
+verbose=
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -n|--dry-run)    # Show what would be done, but don't actually do it. 
+            dry_run="--dry-run"
+            ;;
+        -v|--verbose)    # Print verbose output
+            verbose="--verbose"
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+    shift
+done
+
+check_options() {
+  if [ "$dry_run" ]; then
+    echo "Running with --dry-run"
+  fi
+  
+  if [ "$verbose" ]; then
+   echo "Running with --verbose"
+  fi
+  
+}
+
+
+run_rclone() {
+  command="rclone sync $source $dest $verbose $dry_run --bwlimit=$bandwidth_limit $options --error-on-no-transfer" 
+  print_status "START: Running backup at $(date '+%a %Y-%m-%d %H:%M:%S')."
+  echo -e "Running with command:\n$command"
+  eval "$command"
+  exit_code=$?
+}
+
+check_exit() {
+  echo "$exit_code"
+  if [ ${exit_code} -eq 0 ]; then
+    print_status "Rclone job finished successfully."
+  elif [ ${exit_code} -eq 9 ]; then
+    message="Rclone job finished succesfully, but no files were transferred."
+    send_email "$message"
+  else
+    message="Rclone finished with errors."
+    send_email "$message"
+  fi
+}
+
+main() {
+  check_options
+  run_rclone
+  check_exit
+}
+
+main
