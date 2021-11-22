@@ -49,15 +49,14 @@ readonly PROGDIR
 # Print a status message
 print_status() {
   echo
-  echo "$1"
+  echo "$(date '+%a %Y-%m-%d %H:%M:%S'): $1"
   echo
 }
 
 # Print an error message to stderr in red
 print_err() {
-  tput setaf 1
+  printf "$(date '+%a %Y-%m-%d %H:%M:%S'):"
   printf -- '[ERROR] %s\n' "${*}" >&2
-  tput sgr0
 }
 
 # Print an error message in red and exit the script
@@ -149,7 +148,7 @@ check_options() {
 
 run_rclone() {
   command="rclone sync $source $dest $verbose $dry_run --bwlimit=\"$bandwidth_limit\" $options --error-on-no-transfer" 
-  print_status "START: Running backup at $(date '+%a %Y-%m-%d %H:%M:%S')."
+  print_status "START."
   echo -e "Running with command:\n$command"
   eval "$command"
   exit_code=$?

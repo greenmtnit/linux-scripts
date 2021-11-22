@@ -51,15 +51,14 @@ readonly PROGDIR
 # Print a status message
 print_status() {
   echo
-  echo "$1"
+  echo "$(date '+%a %Y-%m-%d %H:%M:%S'): $1"
   echo
 }
 
 # Print an error message to stderr in red
 print_err() {
-  tput setaf 1
+  printf "$(date '+%a %Y-%m-%d %H:%M:%S'):"
   printf -- '[ERROR] %s\n' "${*}" >&2
-  tput sgr0
 }
 
 # Print an error message in red and exit the script
@@ -93,7 +92,7 @@ check_borg_running() {
 }
 
 run_backup() {
-  print_status "START: Running backup at $(date '+%a %Y-%m-%d %H:%M:%S')."
+  print_status "START."
   borg create -v --stats                          \
     $BORG_REPO::'{hostname}-{now:%Y%m%d%H%M%S}'    \
       /                                   \
