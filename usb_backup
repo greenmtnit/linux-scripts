@@ -42,6 +42,10 @@ luks_name="usb-backup"
 
 # Don't edit vars below this line
 
+dest="$mountpoint/$backup_dir"
+
+rsync_command="rsync -aP --delete $source $dest" 
+
 PROGNAME=$(basename "$0")
 readonly PROGNAME
 
@@ -76,40 +80,11 @@ send_email() {
   echo "$message" | mail -s "$subject" "$dest_addr" 
 }
 
-show_help() {
-    cat <<EOF
-    Usage: $PROGNAME
-  
-    Runs simple rsync backup to LUKS-encryped USB drive.
-    
-    Helps unlock and mount the USB, check it's mounted, run rsync command, close,
-    unmount, and eject the USB.
-    You must edit variables in this script manually.
-
-    Options:
-       -h --help              Show this help.
-
-EOF
+check_exit() {
+  if [[ $1  > 0 ]]; then
+    print_err "Job did not run succesfully."
+  fi
 }
-
-while :; do
-    case $1 in
-        -h|-\?|--help)
-            show_help    # Display a usage synopsis.
-            exit
-            ;;
-        --)              # End of all options.
-            shift
-            break
-            ;;
-        -?*)
-            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
-            ;;
-        *)               # Default case: No more options, so break out of the loop.
-            break
-    esac
-    shift
-done
 
 check_root() {
   if [[ $EUID > 0 ]]; then
@@ -144,17 +119,12 @@ prepare_usb() {
   fi
 }
 
-prepare_command() {
-  command="rsync -aP --delete $source $mountpoint/$backup_dir" 
-}
-
 prompt_user() {
-  echo -e "The command that will be executed is:\n$command"
+  echo -e "The command that will be executed is:\n$rsync_command"
   read -p "Continue? (Y/N): " confirm 
   if [[ ! $confirm == [yY] ]]; then
     die "Exiting"
   fi
-
   read -p "Are you 100% sure you want to run the above command? This can cause data loss! (Y/N): " confirm 
   if [[ ! $confirm == [yY] ]]; then
     die "Exiting"
@@ -163,20 +133,20 @@ prompt_user() {
 
 run_backup() {
   print_status "Running backup."
-  eval "$command"
-  exit_code="$?"
+  eval "$rsync_command"
+  check_exit "$?" 
 }
 
 check_exit() {
-  if [[ $exit_code  > 0 ]]; then
-    print_err "rsync did not run succesfully."
+  if [[ $1  > 0 ]]; then
+    print_err "Job did not run succesfully."
   fi
 }
 
 close_usb() {
   print_status "Syncing."
   sync
-
+  
   print_status "Unmounting volume."
   umount "$mountpoint"
   if mountpoint "$mountpoint" > /dev/null; then
@@ -210,7 +180,6 @@ main() {
   check_root
   check_usb
   prepare_usb
-  prepare_command
   prompt_user
   run_backup
   check_exit
