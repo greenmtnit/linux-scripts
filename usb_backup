@@ -1,0 +1,220 @@
+#!/bin/bash
+#
+# Run basic backup (rsync) to Luks-encrypted USB drive 
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+# Source files/dirs to back up
+source="/home/me/keys \
+	/home/me/important \
+	/home/me/.ssh"
+
+# USB #1. Run 'ls -l /dev/disk/by-id' to find this.
+usb1="/dev/disk/by-id/usb-xxxxxxxxxxxxxxx-part1"
+
+# USB #2
+usb2="/dev/disk/by-id/usb-yyyyyyyyyyyyyyy-part1"
+
+# Mountpoint, to mount LUKS volume at
+mountpoint="/home/me/usb"
+
+# Backup directory on USB
+backup_dir="backups"
+
+# LUKS name for mapper device
+luks_name="usb-backup"
+
+# Don't edit vars below this line
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print a status message
+print_status() {
+  echo
+  echo "$1"
+  echo
+}
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+send_email() {
+  local subject
+  local message
+  message="$1"
+  subject="Alert on $(hostname -f)"
+  echo "$message" | mail -s "$subject" "$dest_addr" 
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME
+  
+    Runs simple rsync backup to LUKS-encryped USB drive.
+    
+    Helps unlock and mount the USB, check it's mounted, run rsync command, close,
+    unmount, and eject the USB.
+    You must edit variables in this script manually.
+
+    Options:
+       -h --help              Show this help.
+
+EOF
+}
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+    shift
+done
+
+check_root() {
+  if [[ $EUID > 0 ]]; then
+    die "script must be run as root."
+  fi
+}
+
+check_usb() {
+  if [ -e "$usb1" ]; then
+    drive="$usb1"
+  elif [ -e "$usb2" ]; then
+    drive="$usb2"
+  else
+    die "No backup USB drive found!"
+  fi
+}
+
+prepare_usb() {
+  luks_path="/dev/mapper/$luks_name"
+  if [ -e "$luks_path"]; then
+    die "LUKS mapper $luks_path already exists!"
+  fi
+
+  print_status "Opening LUKS device." 
+  cryptsetup luksOpen "$drive" "$luks_name"
+
+  print_status "Mounting volume."
+  mount "$luks_path" "$mountpoint"
+  
+  if ! mountpoint "$mountpoint" > /dev/null; then
+    die "Mount point $mountpoint not mounted!"
+  fi
+}
+
+prepare_command() {
+  command="rsync -aP --delete $source $mountpoint/$backup_dir" 
+}
+
+prompt_user() {
+  echo -e "The command that will be executed is:\n$command"
+  read -p "Continue? (Y/N): " confirm 
+  if [[ ! $confirm == [yY] ]]; then
+    die "Exiting"
+  fi
+
+  read -p "Are you 100% sure you want to run the above command? This can cause data loss! (Y/N): " confirm 
+  if [[ ! $confirm == [yY] ]]; then
+    die "Exiting"
+  fi
+}
+
+run_backup() {
+  print_status "Running backup."
+  eval "$command"
+  exit_code="$?"
+}
+
+check_exit() {
+  if [[ $exit_code  > 0 ]]; then
+    print_err "rsync did not run succesfully."
+  fi
+}
+
+close_usb() {
+  print_status "Syncing."
+  sync
+
+  print_status "Unmounting volume."
+  umount "$mountpoint"
+  if mountpoint "$mountpoint" > /dev/null; then
+    print_err "Mount point $mountpoint is still mounted!"
+    return 1
+  fi
+
+  print_status "Closing LUKS device."
+  cryptsetup luksClose "$luks_name"
+  if [[ -e "$luks_path" ]]; then
+    print_err "LUKS mapper $luks_path may not have been closed!"
+    return 1
+  fi
+  
+  print_status "Ejecting drive."
+  eject "$drive"
+  if [[ -e "$drive" ]]; then
+    print_err "Drive may not have been ejected!"
+    return 1
+  fi
+
+  print_status "It should now be safe to eject your drive, but make sure it's not mounted below:"
+  echo ""
+  df -h
+  echo ""
+  lsblk
+  echo ""
+}
+
+main() {
+  check_root
+  check_usb
+  prepare_usb
+  prepare_command
+  prompt_user
+  run_backup
+  check_exit
+  close_usb
+}
+
+main
