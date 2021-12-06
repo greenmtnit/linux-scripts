@@ -82,7 +82,7 @@ send_email() {
 
 check_exit() {
   if [[ $1  > 0 ]]; then
-    print_err "Job did not run succesfully."
+    print_err "Previous command did not run succesfully."
   fi
 }
 

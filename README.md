@@ -18,3 +18,6 @@ For Proxmox systems, use this instead: https://github.com/greenmtnit/proxmox-scr
 
 ## usb_backup
 Automates a simple rsync backup command to a LUKS-encryped USB drive.
+
+## usb_zfs_backup
+Automates ZFS send backup to rotating ZFS external USB hard drives.

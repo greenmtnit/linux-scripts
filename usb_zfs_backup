@@ -1,0 +1,157 @@
+#!/bin/bash
+#
+# Run zfs send backup using syncoind/sanoid to a ZFS USB HDD
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+# USB A. Run 'ls -l /dev/disk/by-id' to find this.
+usb_a="/dev/disk/by-id/my-id-here-aaaaaaaa"
+
+# pool name on ZFS USB device
+usb_a_pool="usbbackup-a"
+
+# dataset name on the ZFS USB drive
+usb_a_dataset="backups"
+
+# USB B
+usb_b="/dev/disk/by-id/my-id-here-bbbbbbbb"
+
+# pool name on ZFS USB device
+usb_b_pool="usbbackup-b"
+
+# dataset name on the ZFS USB drive
+usb_b_dataset="backups"
+
+# directory where sanpoid.conf for USBs is located
+sanoid_config_dir="/etc/sanoid/usb.d"
+
+# source dataset 1
+source1="tank/data/backups"
+
+# source dataset 2
+source2="tank/data/vms"
+
+# destination dataset 1, relative to usb parent dataset, corresponds to source1
+dest1=backups
+
+# destination dataset 2, relative to usb parent dataset, corresponds to source1
+dest2=vms
+
+# Don't edit vars below this line
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print a status message
+print_status() {
+  echo
+  echo "$1"
+  echo
+}
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+check_exit() {
+  if [[ $1  > 0 ]]; then
+    die "Previous command did not run succesfully."
+  fi
+}
+
+check_root() {
+  if [[ $EUID > 0 ]]; then
+    die "script must be run as root."
+  fi
+}
+
+check_usb() {
+  if [ -e "$usb_a" ]; then
+    drive="$usb_a"
+    pool="$usb_a_pool"
+    zfs_target="$usb_a_pool/$usb_a_dataset"
+  elif [ -e "$usb_b" ]; then
+    drive="$usb_b"
+    pool="$usb_b_pool"
+    zfs_target="$usb_b_pool/$usb_b_dataset"
+  else
+    die "No backup USB drive found!"
+  fi
+  zpool import "$pool"
+}
+
+decrypt_zfs() {
+  # will prompt user for passphrase if that's how encryption is configured
+  zfs load-key "$zfs_target" 
+}
+
+prompt_user() {
+  echo -e "Run the ZFS backup to USB HDD now?"
+  read -p "Continue? (Y/N): " confirm 
+  if [[ ! $confirm == [yY] ]]; then
+    die "Exiting"
+  fi
+}
+
+run_backup() {
+  syncoid -r --skip-parent --no-sync-snap "$source1" "$zfs_target/$dest1"
+  syncoid -r --no-sync-snap "$source2" "$zfs_target/$dest2"
+  sanoid --prune-snapshots --configdir=/etc/sanoid/usb.d
+}
+
+close_usb() {
+  print_status "Syncing."
+  sync
+
+  print_status "Closing (re-encrypting) ZFS dataset."
+  zfs unload-key -r "$zfs_target"
+  check_exit "$?"
+
+  sleep 2
+
+  print_status "Exporting pool"
+  zpool export "$pool"
+
+  print_status "Ejecting drive."
+  udisksctl power-off -b "$drive"
+  check_exit "$?"
+}
+
+main() {
+  check_root
+  check_usb
+  decrypt_zfs
+  prompt_user
+  run_backup
+  close_usb
+}
+
+main
