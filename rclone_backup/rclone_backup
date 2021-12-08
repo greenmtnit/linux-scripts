@@ -155,14 +155,15 @@ run_rclone() {
 }
 
 check_exit() {
-  echo "$exit_code"
   if [ ${exit_code} -eq 0 ]; then
     print_status "Rclone job finished successfully."
   elif [ ${exit_code} -eq 9 ]; then
-    message="Rclone job finished succesfully, but no files were transferred."
+    message="Rclone job finished succesfully, but no files were transferred. Exit code: $exit_code"
+    print_status "$message"
     send_email "$message"
   else
-    message="Rclone finished with errors."
+    message="Rclone finished with errors. Exit code: $exit_code"
+    print_status "$message"
     send_email "$message"
   fi
 }

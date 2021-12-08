@@ -131,6 +131,9 @@ close_usb() {
   print_status "Syncing."
   sync
 
+  print_status "Unmounting"
+  zfs unmount "$pool"
+
   print_status "Closing (re-encrypting) ZFS dataset."
   zfs unload-key -r "$zfs_target"
   check_exit "$?"
