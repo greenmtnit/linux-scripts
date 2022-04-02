@@ -77,7 +77,7 @@ send_email() {
   local message
   message="$1"
   subject="Alert on $(hostname -f)"
-  echo "$message" | mail -s "$subject" "$dest_addr" 
+  echo "$message" | mail -s "$subject" "$dest_addr" -a "FROM:$from_addr"
 }
 
 check_exit() {
