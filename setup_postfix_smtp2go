@@ -1,0 +1,230 @@
+#!/bin/bash
+#
+# Configures sending email via SMTP2GO, using Postfix.
+# 
+# Original author: Tim West <tim@greenmtnit.com>
+#
+# Copyright (C) 2021 Green Mountain IT Solutions, LLC <info@greenmtnit.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+PROGNAME=$(basename "$0")
+readonly PROGNAME
+
+PROGDIR=$(readlink -m "$(dirname "$0")")
+readonly PROGDIR
+
+# Print an error message to stderr in red
+print_err() {
+  tput setaf 1
+  printf -- '[ERROR] %s\n' "${*}" >&2
+  tput sgr0
+}
+
+# Print an error message in red and exit the script
+die() {
+  print_err "${*}"
+  exit 1
+}
+
+show_help() {
+    cat <<EOF
+    Usage: $PROGNAME options
+    
+    This script configures sending email via SMTP2GO using Postfix. 
+    It installs and configures Postfix, then sends a test email.
+    You will be required to enter the password for the FROM mailbox when running the script.
+
+    OPTIONS:
+       -f --from              FROM email address, to send alert emails from.
+       -d --dest              Destination to send test email to. 
+       -h --help              Show this help.
+
+    
+    Examples:
+       Configure sending emails FROM alerts@mydomain.com, to me@mydomain.com.
+       $PROGNAME -f alerts@mydomain.com -d me@mydomain.com
+EOF
+}
+
+# Initialize all the option variables.
+# This ensures we are not contaminated by variables from the environment.
+from_addr=
+dest_addr=
+
+if [[ -z "$1" ]]; then
+  print_err "No arguments given. This program requires arguments."
+  show_help
+  exit 
+fi
+
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            show_help    # Display a usage synopsis.
+            exit
+            ;;
+        -f|--from)       # From email address.
+            if [[ "$2" ]]; then
+                from_addr="$2"
+                shift
+            else
+                die 'ERROR: "--from" requires a non-empty option argument.'
+            fi
+            ;;
+        -d|--dest)       # From email address.
+            if [[ "$2" ]]; then
+                dest_addr="$2"
+                shift
+            else
+                die 'ERROR: "--dest" requires a non-empty option argument.'
+            fi
+            ;;
+        --)              # End of all options.
+            shift
+            break
+            ;;
+        -?*)
+            printf 'WARN: Unknown option (ignored): %s\n' "$1" >&2
+            ;;
+        *)               # Default case: No more options, so break out of the loop.
+            break
+    esac
+
+    shift
+done
+
+print_status() {
+  echo
+  echo "$1..."
+  echo
+}
+
+check_debian() {
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$NAME
+    VER=$VERSION_ID
+    if [ "$OS" != "Debian GNU/Linux" ]; then
+      print_err "WARNING! This script is only tested on Debian." 
+      read -p "Continue anyway (y/n? " -r
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          die "Exiting"
+        fi
+    fi
+  fi
+}
+
+get_password() {
+  read -sp "Enter your password for mailbox $from_addr: " password
+  echo
+  read -sp "Confirm password: " password_conf
+  echo
+  if [[ "$password" != "$password_conf" ]]; then
+    die "Passwords do not match."
+  fi
+}
+
+install_prereqs() {
+  print_status "Installing prereqs"
+  local prereqs="postfix mailutils libsasl2-modules"
+  apt-get update -q
+  apt-get install -yq $prereqs
+}
+
+check_prereqs() {
+  print_status "Checking prereqs"
+  local prereqs=( "postfix" "mailutils" "libsasl2-modules" )
+  for prereq in "${prereqs[@]}"
+  do
+    if ! dpkg-query -W -f='${Status}' "$prereq" 2>/dev/null | grep -c "ok installed" >/dev/null 2>&1; then
+      die "Fatal: $prereq not found."
+    fi
+  done
+}
+
+configure_postfix_main() {
+  local file="/etc/postfix/main.cf"
+  print_status "Configuring main.cf"
+  if [[ -f "$file" ]]; then
+    mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  #sed 's/relayhost\ =/relayhost\ =\ [smtp.office365.com]:587/' $file -i
+  cat <<EOF > $file
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = static:$from_addr:$password
+smtp_sasl_security_options = noanonymous
+smtp_tls_security_level = may
+header_size_limit = 4096000
+relayhost = [mail.smtp2go.com]:2525
+
+relay_destination_concurrency_limit = 20	  
+EOF
+}    
+
+configure_generic() {
+  local file="/etc/postfix/generic"
+  print_status "Configuring generic"
+  if [[ -f "$file" ]]; then
+    mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  echo "root@localdomain $from_addr" >> "$file"
+  echo "@localdomain $from_addr" >> "$file"
+  chown root:root "$file"
+  chmod 0600 "$file"
+  postmap "$file"
+}
+
+configure_smtp_header_checks() {
+  local file="/etc/postfix/smtp_header_checks"
+  print_status "Configuring smtp_header_checks"
+  if [[ -f "$file" ]]; then
+    mv "$file" "$file".bak"$(date '+%Y%m%d%H%M%S')" 
+  fi
+  echo "/^From:.*/ REPLACE From: $(hostname)-alert <$from_addr>" > $file
+  chown root:root "$file"
+  chmod 0600 "$file"
+}
+
+configure_postfix_service() {
+  print_status "Configuring Postfix service"
+  systemctl restart postfix
+  systemctl enable postfix
+}
+
+run_newaliases() {
+  newaliases
+}
+
+send_test_emails() {
+  print_status "Sending test emails"
+  echo "Testing regular mail at $(date '+%H:%M:%S')" | mail -s "Test at $(date '+%H:%M:%S')" "$dest_addr" -a "FROM:$from_addr"
+}
+ 
+main() {
+  check_debian
+  get_password
+  install_prereqs
+  check_prereqs
+  configure_postfix_main
+  configure_generic
+  configure_smtp_header_checks
+  configure_postfix_service
+  run_newaliases
+  send_test_emails
+
+}
+
+main
